@@ -16,38 +16,19 @@ namespace Dotnet5.GraphQL3.Store.WebAPI.GraphQL.Executers
 {
     public class StoreExecuter<TSchema> : DefaultGraphQLExecuter<TSchema> where TSchema : ISchema
     {
-        private readonly IServiceProvider _serviceProvider;
+        public StoreExecuter(TSchema schema, IDocumentExecuter documentExecuter, IOptions<GraphQLOptions> options, IEnumerable<IDocumentExecutionListener> listeners, IEnumerable<IValidationRule> validationRules)
+            : base(schema, documentExecuter, options, listeners, validationRules) { }
 
-        public StoreExecuter(IServiceProvider serviceProvider,
-            TSchema schema, IDocumentExecuter documentExecuter,
-            IOptions<GraphQLOptions> options,
-            IEnumerable<IDocumentExecutionListener> listeners,
-            IEnumerable<IValidationRule> validationRules)
-            : base(schema, documentExecuter, options, listeners, validationRules)
+        public override async Task<ExecutionResult> ExecuteAsync(string operationName, string query, Inputs variables, IDictionary<string, object> context, IServiceProvider requestServices, CancellationToken cancellationToken = new CancellationToken())
         {
-            _serviceProvider = serviceProvider;
-        }
+            var result = await base.ExecuteAsync(operationName, query, variables, context, requestServices, cancellationToken);
+            var notification = requestServices.GetRequiredService<INotificationContext>();
 
-        protected override ExecutionOptions GetOptions(string operationName, string query, Inputs variables,
-            IDictionary<string, object> context, CancellationToken cancellationToken)
-        {
-            var options = base.GetOptions(operationName, query, variables, context, cancellationToken);
-            options.RequestServices = _serviceProvider;
-            return options;
-        }
+            if (notification.HasNotifications is false) return result;
 
-        public override async Task<ExecutionResult> ExecuteAsync(string operationName, string query, Inputs variables,
-            IDictionary<string, object> context, CancellationToken cancellationToken = new CancellationToken())
-        {
-            var result = await base.ExecuteAsync(operationName, query, variables, context, cancellationToken);
-            var notification = _serviceProvider.GetRequiredService<INotificationContext>();
-
-            if (notification.HasNotifications)
-            {
-                result.Errors = notification.ExecutionErrors;
-                result.Data = default;
-            }
-
+            result.Errors = notification.ExecutionErrors;
+            result.Data = default;
+            
             return result;
         }
     }

@@ -1,10 +1,10 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Dotnet5.GraphQL3.Domain.Abstractions.Entities;
+using Dotnet5.GraphQL3.Repositories.Abstractions.Pages;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Query;
 
@@ -44,8 +44,8 @@ namespace Dotnet5.GraphQL3.Repositories.Abstractions
         public virtual bool Exists(TId id)
             => _dbSet.AsNoTracking().Any(x => Equals(x.Id, id));
 
-        public virtual async Task<bool> ExistsAsync(TId id, CancellationToken cancellationToken = default) =>
-            await _dbSet.AsNoTracking().AnyAsync(x => Equals(x.Id, id), cancellationToken);
+        public virtual async Task<bool> ExistsAsync(TId id, CancellationToken cancellationToken = default) 
+            => await _dbSet.AsNoTracking().AnyAsync(x => Equals(x.Id, id), cancellationToken);
 
         public virtual TEntity Add(TEntity entity)
         {
@@ -61,8 +61,7 @@ namespace Dotnet5.GraphQL3.Repositories.Abstractions
             return entity;
         }
 
-        public TEntity GetById(TId id, Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object>> include = default,
-            bool withTracking = false)
+        public TEntity GetById(TId id, Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object>> include = default, bool withTracking = false)
         {
             if (Equals(id, default(TId))) return default;
             if (include is null && withTracking) return _dbSet.Find(id);
@@ -76,7 +75,7 @@ namespace Dotnet5.GraphQL3.Repositories.Abstractions
             bool withTracking = false, CancellationToken cancellationToken = default)
         {
             if (Equals(id, default(TId))) return default;
-            if (include is null && withTracking) return await _dbSet.FindAsync(id, cancellationToken);
+            if (include is null && withTracking) return await _dbSet.FindAsync(new object[] {id}, cancellationToken);
 
             return include is null
                 ? await _dbSet.AsNoTracking().FirstOrDefaultAsync(x => Equals(x.Id, id), cancellationToken)
@@ -95,7 +94,8 @@ namespace Dotnet5.GraphQL3.Repositories.Abstractions
             _dbSet.Update(entity);
         }
 
-        public IEnumerable<TResult> GetAll<TResult>(
+        public PagedResult<TResult> GetAll<TResult>(
+            PageParams pageParams,
             Expression<Func<TEntity, TResult>> selector = default,
             Expression<Func<TEntity, bool>> predicate = default,
             Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = default,
@@ -106,13 +106,11 @@ namespace Dotnet5.GraphQL3.Repositories.Abstractions
             query = include is null ? query : include(query);
             query = predicate is null ? query : query.Where(predicate);
             query = orderBy is null ? query : orderBy(query);
-
-            return selector is null
-                ? (IEnumerable<TResult>) query
-                : query.Select(selector).ToArray();
+            return PagedResult<TResult>.Create(query.Select(selector), pageParams);
         }
 
-        public async Task<IEnumerable<TResult>> GetAllAsync<TResult>(
+        public Task<PagedResult<TResult>> GetAllAsync<TResult>(
+            PageParams pageParams,
             Expression<Func<TEntity, TResult>> selector,
             Expression<Func<TEntity, bool>> predicate = default,
             Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = default,
@@ -124,7 +122,7 @@ namespace Dotnet5.GraphQL3.Repositories.Abstractions
             query = include is null ? query : include(query);
             query = predicate is null ? query : query.Where(predicate);
             query = orderBy is null ? query : orderBy(query);
-            return await query.Select(selector).ToArrayAsync(cancellationToken);
+            return PagedResult<TResult>.CreateAsync(query.Select(selector), pageParams, cancellationToken);
         }
     }
 }
